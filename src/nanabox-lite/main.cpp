@@ -117,10 +117,10 @@ static std::string ReadFileContents(const wchar_t* path)
         path,
         GENERIC_READ,
         FILE_SHARE_READ,
-        NULL,
+        nullptr,
         OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL,
-        NULL
+        nullptr
     );
 
     if (hFile == INVALID_HANDLE_VALUE) {
@@ -135,11 +135,11 @@ static std::string ReadFileContents(const wchar_t* path)
 
     std::string content(static_cast<size_t>(fileSize.QuadPart), '\0');
 
-    DWORD bytesRead;
-    BOOL result = ReadFile(hFile, content.data(), static_cast<DWORD>(fileSize.QuadPart), &bytesRead, NULL);
+    DWORD bytesRead = 0;
+    BOOL result = ReadFile(hFile, content.data(), static_cast<DWORD>(fileSize.QuadPart), &bytesRead, nullptr);
     CloseHandle(hFile);
 
-    if (!result || bytesRead != fileSize.QuadPart) {
+    if (!result || bytesRead != static_cast<DWORD>(fileSize.QuadPart)) {
         return "";
     }
 
@@ -215,10 +215,10 @@ static bool ApplyProfile(const NANABOX_PROFILE* profile)
         NANABOX_DOS_SYMLINK,
         GENERIC_READ | GENERIC_WRITE,
         0,
-        NULL,
+        nullptr,
         OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL,
-        NULL
+        nullptr
     );
 
     if (hDevice == INVALID_HANDLE_VALUE) {
@@ -235,16 +235,16 @@ static bool ApplyProfile(const NANABOX_PROFILE* profile)
         return false;
     }
 
-    DWORD bytesReturned;
+    DWORD bytesReturned = 0;
     BOOL result = DeviceIoControl(
         hDevice,
-        NANABOX_IOCTL_SET_PROFILE,
-        (LPVOID)profile,
-        sizeof(NANABOX_PROFILE),
-        NULL,
-        0,
+        static_cast<DWORD>(NANABOX_IOCTL_SET_PROFILE),
+        const_cast<NANABOX_PROFILE*>(profile),
+        static_cast<DWORD>(sizeof(NANABOX_PROFILE)),
+        nullptr,
+        0U,
         &bytesReturned,
-        NULL
+        nullptr
     );
 
     CloseHandle(hDevice);
