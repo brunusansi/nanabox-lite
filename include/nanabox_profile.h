@@ -8,7 +8,7 @@
 #ifndef NANABOX_PROFILE_H
 #define NANABOX_PROFILE_H
 
-#ifdef _KERNEL_MODE
+#ifdef NANABOX_KERNEL_MODE
 #include <ntddk.h>
 #else
 #include <windows.h>

@@ -8,7 +8,7 @@
 #include <ntddk.h>
 #include <wdf.h>
 
-#define _KERNEL_MODE
+#define NANABOX_KERNEL_MODE
 #include "../include/nanabox_profile.h"
 
 /* Driver globals */
