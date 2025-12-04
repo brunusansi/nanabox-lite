@@ -38,4 +38,5 @@ jobs:
         with:
           name: nanabox-lite-cli
           path: |
-            **\x64\Release\nanabox-lite.exe
+            x64/Release/nanabox-lite.exe
+            build/Release/x64/nanabox-lite.exe
