@@ -238,7 +238,7 @@ static bool ApplyProfile(const NANABOX_PROFILE* profile)
     DWORD bytesReturned = 0;
     BOOL result = DeviceIoControl(
         hDevice,
-        NANABOX_IOCTL_SET_PROFILE,
+        static_cast<DWORD>(NANABOX_IOCTL_SET_PROFILE),
         const_cast<NANABOX_PROFILE*>(profile),
         static_cast<DWORD>(sizeof(NANABOX_PROFILE)),
         nullptr,
