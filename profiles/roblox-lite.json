@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "cpu": {
+    "vendor": "GenuineIntel",
+    "brandString": "Intel(R) Core(TM) i7-9700K CPU @ 3.60GHz",
+    "hypervisorBit": false
+  },
+  "smbios": {
+    "systemManufacturer": "ASUSTeK COMPUTER INC.",
+    "systemProductName": "ROG STRIX B660-F GAMING WIFI",
+    "baseBoardManufacturer": "ASUSTeK COMPUTER INC.",
+    "baseBoardProduct": "B660-F GAMING",
+    "systemSerial": "MB-123456789",
+    "systemUUID": "550e8400-e29b-41d4-a716-446655440000"
+  }
+}

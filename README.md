@@ -65,31 +65,103 @@ Once this wiring is stable and testable inside a GPU‑P VM, more advanced anti�
 - `scripts/`
   - `install.ps1` – installs the driver + CLI + profiles inside the guest VM.
 
-## Building (planned)
+## Prerequisites
 
-The intended toolchain:
+- **Windows 10 or 11** (x64)
+- **Visual Studio 2022** (Community edition or higher)
+- **Windows Driver Kit (WDK)** for Visual Studio 2022
+  - Download from [Microsoft WDK downloads](https://learn.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk)
+- **Test-signing enabled** in the target VM (for unsigned test drivers)
 
-- Windows 10/11
-- Visual Studio (Community or higher)
-- Windows Driver Kit (WDK) for x64
+## Building
 
-A Visual Studio solution will be added to:
+1. **Open the solution**:  
+   Open `NanaBoxLite.sln` in Visual Studio 2022.
 
-- build the kernel driver,
-- build the user‑mode CLI.
+2. **Select configuration**:  
+   Choose **Release** or **Debug** and platform **x64**.
 
-## Installation (planned)
+3. **Build the solution**:  
+   Build → Build Solution (or press `Ctrl+Shift+B`).
 
-Inside the guest VM:
+   The build outputs will be placed in:
+   - `build\Release\x64\nanabox-lite.exe` (CLI tool)
+   - `build\Release\x64\nanabox_hvfilter.sys` (kernel driver)
 
-1. Enable test‑signing if using an unsigned test driver.
-2. Run `scripts/install.ps1` as Administrator:
-   - Installs the driver (`nanabox_hvfilter`),
-   - Copies `nanabox-lite.exe` and profiles into `C:\Program Files\NanaBoxLite` (by default).
-3. Apply a profile:
+> **Note**: The driver project requires the WDK to be installed. If you get errors about missing `wdf.h` or kernel headers, ensure the WDK is properly installed and integrated with Visual Studio.
+
+## Installation
+
+### Prepare the guest VM
+
+1. **Enable test signing** (required for unsigned test drivers):
    ```powershell
-   "C:\Program Files\NanaBoxLite\nanabox-lite.exe" --profile "C:\Program Files\NanaBoxLite\profiles\roblox-lite.json"
+   bcdedit /set testsigning on
    ```
+   Then reboot the VM.
+
+2. **Copy build output** into the VM:  
+   Copy the entire repository (or at least `build\`, `driver\`, `profiles\`, and `scripts\` folders) to a location inside the VM.
+
+### Run the installer
+
+Inside the guest VM, run as Administrator:
+
+```powershell
+cd <path-to-nanabox-lite>
+.\scripts\install.ps1
+```
+
+The script will:
+- Create `C:\Program Files\NanaBoxLite` (or a custom path via `-InstallDir`).
+- Copy `nanabox-lite.exe` and profiles.
+- Install the driver using `pnputil`.
+
+### Apply a profile
+
+```powershell
+"C:\Program Files\NanaBoxLite\nanabox-lite.exe" --profile "C:\Program Files\NanaBoxLite\profiles\roblox-lite.json"
+```
+
+Or simply run without arguments to use the default `roblox-lite.json` profile:
+
+```powershell
+"C:\Program Files\NanaBoxLite\nanabox-lite.exe"
+```
+
+## CLI usage
+
+```
+Usage: nanabox-lite.exe [options]
+
+Options:
+  --profile <path>  Path to JSON profile file
+                    Default: profiles\roblox-lite.json (relative to exe)
+  --help, -h        Show this help message
+```
+
+## Profile format
+
+Profiles are JSON files defining the CPU and SMBIOS identity to apply. Example (`profiles/roblox-lite.json`):
+
+```json
+{
+  "version": 1,
+  "cpu": {
+    "vendor": "GenuineIntel",
+    "brandString": "Intel(R) Core(TM) i7-9700K CPU @ 3.60GHz",
+    "hypervisorBit": false
+  },
+  "smbios": {
+    "systemManufacturer": "ASUSTeK COMPUTER INC.",
+    "systemProductName": "ROG STRIX B660-F GAMING WIFI",
+    "baseBoardManufacturer": "ASUSTeK COMPUTER INC.",
+    "baseBoardProduct": "B660-F GAMING",
+    "systemSerial": "MB-123456789",
+    "systemUUID": "550e8400-e29b-41d4-a716-446655440000"
+  }
+}
+```
 
 ## Legal
 
