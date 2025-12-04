@@ -15,23 +15,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Torna o msbuild disponível no PATH
+      # Deixa o msbuild disponível no PATH
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1.3.1
 
-      # Build do CLI (ajuste o .vcxproj se o nome for diferente)
+      # Build do CLI (nanabox-lite.exe)
+      # OBS: se o .vcxproj estiver em outro lugar, ajuste o caminho abaixo.
       - name: Build CLI (nanabox-lite.exe)
         run: |
-          msbuild /m /p:Configuration=Release /p:Platform=x64 nanabox-lite.vcxproj
+          msbuild /m /p:Configuration=Release /p:Platform=x64 src/nanabox-lite/nanabox-lite.vcxproj
         shell: pwsh
 
-      # Build do driver
+      # Build do driver (nanabox_hvfilter.sys)
       - name: Build driver (nanabox_hvfilter.sys)
         run: |
-          msbuild /m /p:Configuration=Release /p:Platform=x64 .\driver\nanabox_hvfilter.vcxproj
+          msbuild /m /p:Configuration=Release /p:Platform=x64 driver\nanabox_hvfilter.vcxproj
         shell: pwsh
 
-      # Só pra debug: listar onde os binários foram parar
+      # Passo de debug: mostra onde os binários foram gerados
       - name: List build outputs
         run: |
           Write-Host "=== Procurando nanabox-lite.exe ==="
@@ -44,20 +45,20 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path artifact -Force | Out-Null
 
-          # ATENÇÃO: ajuste estes caminhos conforme onde o build realmente gerar os arquivos.
-          # Depois do próximo run, olhe o passo "List build outputs" nos logs pra confirmar.
-
           # CLI
-          Copy-Item -Path ".\build\Release\x64\nanabox-lite.exe" -Destination ".\artifact\" -Force
+          # IMPORTANTE: confirme no log do passo "List build outputs" se o caminho é este mesmo.
+          # Ajuste se o projeto gerar em outra pasta.
+          Copy-Item -Path ".\src\nanabox-lite\x64\Release\nanabox-lite.exe" -Destination ".\artifact\" -Force
 
-          # Driver
+          # Driver .sys e .inf
           Copy-Item -Path ".\driver\x64\Release\nanabox_hvfilter.sys" -Destination ".\artifact\" -Force
           Copy-Item -Path ".\driver\nanabox_hvfilter.inf" -Destination ".\artifact\" -Force
 
-          # Script e perfis (se existirem)
+          # Script de instalação e perfis (se existirem)
           if (Test-Path ".\scripts\install.ps1") {
             Copy-Item -Path ".\scripts\install.ps1" -Destination ".\artifact\" -Force
           }
+
           if (Test-Path ".\profiles") {
             Copy-Item -Path ".\profiles" -Destination ".\artifact\profiles" -Recurse -Force
           }
