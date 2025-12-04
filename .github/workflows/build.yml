@@ -9,39 +9,36 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    # Use windows-2022 because it includes WDK preinstalled
+    # windows-latest (Windows Server 2025) dropped WDK support
+    runs-on: windows-2022
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Disponibiliza o msbuild no PATH
+      # Expose msbuild on PATH
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1.3.1
 
-      # Instala o Windows Driver Kit (WDK) para compilar o driver (ntddk.h, etc.)
-      - name: Install Windows Driver Kit (WDK)
-        run: choco install windows-driver-kit -y
-        shell: pwsh
-
-      # Build do CLI (nanabox-lite.exe)
+      # Build CLI (nanabox-lite.exe)
       - name: Build CLI (nanabox-lite.exe)
         run: |
           msbuild /m /p:Configuration=Release /p:Platform=x64 src/nanabox-lite/nanabox-lite.vcxproj
         shell: pwsh
 
-      # Build do driver (nanabox_hvfilter.sys)
+      # Build driver (nanabox_hvfilter.sys)
       - name: Build driver (nanabox_hvfilter.sys)
         run: |
           msbuild /m /p:Configuration=Release /p:Platform=x64 driver\nanabox_hvfilter.vcxproj
         shell: pwsh
 
-      # Passo de debug: mostra onde os binários foram gerados
+      # Debug step: show where binaries were generated
       - name: List build outputs
         run: |
-          Write-Host "=== Procurando nanabox-lite.exe ==="
+          Write-Host "=== Looking for nanabox-lite.exe ==="
           Get-ChildItem -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -ieq "nanabox-lite.exe" }
-          Write-Host "`n=== Procurando nanabox_hvfilter.sys ==="
+          Write-Host "`n=== Looking for nanabox_hvfilter.sys ==="
           Get-ChildItem -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -ieq "nanabox_hvfilter.sys" }
         shell: pwsh
 
@@ -50,28 +47,28 @@ jobs:
           New-Item -ItemType Directory -Path artifact -Force | Out-Null
 
           # CLI
-          # Pelo log atual, o .exe é gerado em:
-          # src\nanabox-lite\build\Release\x64\nanabox-lite.exe
+          # Based on OutDir in vcxproj: $(SolutionDir)build\$(Configuration)\$(Platform)\
+          # When building standalone vcxproj, SolutionDir = project directory
           Copy-Item -Path ".\src\nanabox-lite\build\Release\x64\nanabox-lite.exe" `
                     -Destination ".\artifact\" -Force
 
           # Driver .sys
-          # Pelo log atual, o .sys é gerado em:
-          # driver\build\Release\x64\nanabox_hvfilter\nanabox_hvfilter.sys
-          Copy-Item -Path ".\driver\build\Release\x64\nanabox_hvfilter\nanabox_hvfilter.sys" `
+          # Based on OutDir in vcxproj: $(SolutionDir)build\$(Configuration)\$(Platform)\
+          # When building standalone vcxproj, SolutionDir = project directory
+          Copy-Item -Path ".\driver\build\Release\x64\nanabox_hvfilter.sys" `
                     -Destination ".\artifact\" -Force
 
-          # Driver .inf (fonte)
+          # Driver .inf (source)
           Copy-Item -Path ".\driver\nanabox_hvfilter.inf" `
                     -Destination ".\artifact\" -Force
 
-          # Script de instalação
+          # Installation script
           if (Test-Path ".\scripts\install.ps1") {
             Copy-Item -Path ".\scripts\install.ps1" `
                       -Destination ".\artifact\" -Force
           }
 
-          # Perfis (por ex. roblox-lite.json)
+          # Profiles (e.g., roblox-lite.json)
           if (Test-Path ".\profiles") {
             Copy-Item -Path ".\profiles" `
                       -Destination ".\artifact\profiles" -Recurse -Force

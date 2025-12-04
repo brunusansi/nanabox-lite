@@ -10,7 +10,7 @@ Write-Host "Source directory: $scriptRoot"
 Write-Host "Installation directory: $InstallDir"
 Write-Host ""
 
-# Caminhos de origem (dentro do bundle extraído)
+# Source paths (within the extracted bundle)
 $cliPath      = Join-Path $scriptRoot "nanabox-lite.exe"
 $driverSys    = Join-Path $scriptRoot "nanabox_hvfilter.sys"
 $driverInf    = Join-Path $scriptRoot "nanabox_hvfilter.inf"
@@ -24,42 +24,42 @@ if (-not (Test-Path $driverInf))  { $missing += $driverInf }
 if (-not (Test-Path $profilesDir)) { $missing += $profilesDir }
 
 if ($missing.Count -gt 0) {
-    Write-Host "Erro: arquivos necessários não encontrados:" -ForegroundColor Red
+    Write-Host "Error: required files not found:" -ForegroundColor Red
     $missing | ForEach-Object { Write-Host " - $_" -ForegroundColor Red }
     throw "Missing required files. Did you extract the entire artifact (nanabox-lite-bundle)?"
 }
 
-Write-Host "Todos os arquivos de origem foram encontrados." -ForegroundColor Green
+Write-Host "All source files found." -ForegroundColor Green
 Write-Host ""
 
-# Cria pasta de instalação
+# Create installation folder
 if (-not (Test-Path $InstallDir)) {
-    Write-Host "Criando pasta: $InstallDir"
+    Write-Host "Creating folder: $InstallDir"
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 }
 
-# Copia CLI e perfis
-Write-Host "Copiando binário e perfis..."
+# Copy CLI and profiles
+Write-Host "Copying binary and profiles..."
 Copy-Item $cliPath -Destination (Join-Path $InstallDir "nanabox-lite.exe") -Force
 if (Test-Path $profilesDir) {
     $destProfiles = Join-Path $InstallDir "profiles"
     Copy-Item $profilesDir -Destination $destProfiles -Recurse -Force
 }
 
-# Instala driver via pnputil usando o INF
-Write-Host "Instalando driver (nanabox_hvfilter) via pnputil..."
+# Install driver via pnputil using the INF
+Write-Host "Installing driver (nanabox_hvfilter) via pnputil..."
 $pnputil = "$env:SystemRoot\System32\pnputil.exe"
 
 & $pnputil /add-driver $driverInf /install
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Falha ao instalar o driver via pnputil (código $LASTEXITCODE)." -ForegroundColor Red
+    Write-Host "Failed to install driver via pnputil (code $LASTEXITCODE)." -ForegroundColor Red
     throw "Driver installation failed."
 }
 
 Write-Host ""
-Write-Host "Instalação concluída." -ForegroundColor Green
-Write-Host "Binário: $InstallDir\nanabox-lite.exe"
-Write-Host "Perfis:  $InstallDir\profiles"
+Write-Host "Installation completed." -ForegroundColor Green
+Write-Host "Binary: $InstallDir\nanabox-lite.exe"
+Write-Host "Profiles: $InstallDir\profiles"
 Write-Host ""
-Write-Host "Você pode aplicar um perfil com, por exemplo:" -ForegroundColor Yellow
+Write-Host "You can apply a profile with, for example:" -ForegroundColor Yellow
 Write-Host "`"$InstallDir\nanabox-lite.exe`" --profile `"$InstallDir\profiles\roblox-lite.json`""
