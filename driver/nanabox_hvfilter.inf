@@ -1,0 +1,72 @@
+;
+; NanaBox Lite HV Filter Driver INF
+;
+; This INF file installs the nanabox_hvfilter.sys driver.
+; Intended for test-signing and manual installation via pnputil.
+;
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = System
+ClassGuid   = {4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider    = %ManufacturerName%
+CatalogFile = nanabox_hvfilter.cat
+DriverVer   = 12/04/2025,1.0.0.0
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir = 13
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+nanabox_hvfilter.sys = 1,,
+
+;*****************************************
+; NanaBox HV Filter Device Install Section
+;*****************************************
+
+[Manufacturer]
+%ManufacturerName% = Standard,NTamd64
+
+[Standard.NTamd64]
+%DeviceDesc% = NanaboxHvFilter_Device, Root\NanaboxHvFilter
+
+[NanaboxHvFilter_Device.NT]
+CopyFiles = NanaboxHvFilter_Device.NT.Copy
+
+[NanaboxHvFilter_Device.NT.Copy]
+nanabox_hvfilter.sys
+
+;-------------- Service installation
+[NanaboxHvFilter_Device.NT.Services]
+AddService = NanaboxHvFilter,%SPSVCINST_ASSOCSERVICE%,NanaboxHvFilter_Service_Inst
+
+[NanaboxHvFilter_Service_Inst]
+DisplayName    = %ServiceDesc%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %13%\nanabox_hvfilter.sys
+
+;*****************************************
+; WDF Section
+;*****************************************
+
+[NanaboxHvFilter_Device.NT.Wdf]
+KmdfService = NanaboxHvFilter, NanaboxHvFilter_wdfsect
+
+[NanaboxHvFilter_wdfsect]
+KmdfLibraryVersion = 1.33
+
+;*****************************************
+; Strings
+;*****************************************
+
+[Strings]
+SPSVCINST_ASSOCSERVICE = 0x00000002
+ManufacturerName       = "NanaBox Lite"
+DiskName               = "NanaBox HV Filter Installation Disk"
+DeviceDesc             = "NanaBox HV Filter Device"
+ServiceDesc            = "NanaBox HV Filter Service"
