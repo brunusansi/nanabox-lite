@@ -31,16 +31,15 @@ jobs:
         run: |
           msbuild .\src\nanabox-lite\nanabox-lite.vcxproj `
             /p:Configuration=Release `
-            /p:Platform=x64 `
-            /p:OutDir=build\Release\x64\nanabox-lite\
+            /p:Platform=x64
 
       - name: List build output (debug)
         run: |
-          Get-ChildItem -Recurse -File
+          Get-ChildItem -Recurse -File | Where-Object { $_.Name -like "nanabox-lite.exe" }
 
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
         with:
           name: nanabox-lite-cli
           path: |
-            build/Release/x64/nanabox-lite/nanabox-lite.exe
+            src/nanabox-lite/build/Release/x64/nanabox-lite/nanabox-lite.exe
