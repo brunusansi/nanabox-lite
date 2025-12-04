@@ -1,45 +1,61 @@
-name: Build NanaBox Lite CLI
+name: Build NanaBox Lite
 
 on:
   push:
-    branches:
-      - main
-      - initial-setup
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
-      - initial-setup
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  build-cli:
+  build:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Restore NuGet packages (if any)
+      # Se você já usa dotnet/cmake etc. pra buildar o CLI, mantenha aqui.
+      # Exemplo genérico de build do nanabox-lite.exe:
+      - name: Build CLI (nanabox-lite.exe)
         run: |
-          if (Test-Path ".\NanaBoxLite.sln") {
-            nuget restore .\NanaBoxLite.sln
+          msbuild /m /p:Configuration=Release /p:Platform=x64 nanabox-lite.vcxproj
+        shell: pwsh
+
+      - name: Build driver (nanabox_hvfilter.sys)
+        run: |
+          msbuild /m /p:Configuration=Release /p:Platform=x64 .\driver\nanabox_hvfilter.vcxproj
+        shell: pwsh
+
+      - name: List build outputs
+        run: |
+          Write-Host "=== CLI binaries ==="
+          Get-ChildItem -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "nanabox-lite.exe" }
+          Write-Host "=== Driver binaries ==="
+          Get-ChildItem -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "nanabox_hvfilter.sys" }
+        shell: pwsh
+
+      - name: Prepare artifact
+        run: |
+          New-Item -ItemType Directory -Path artifact -Force | Out-Null
+
+          # Ajuste estes caminhos se o .exe estiver em outro lugar
+          Copy-Item -Path ".\build\Release\x64\nanabox-lite.exe" -Destination ".\artifact\" -Force -ErrorAction Stop
+
+          # Driver sys gerado pelo vcxproj do driver
+          Copy-Item -Path ".\driver\x64\Release\nanabox_hvfilter.sys" -Destination ".\artifact\" -Force -ErrorAction Stop
+          # INF do driver
+          Copy-Item -Path ".\driver\nanabox_hvfilter.inf" -Destination ".\artifact\" -Force -ErrorAction Stop
+
+          # Script e perfis
+          Copy-Item -Path ".\scripts\install.ps1" -Destination ".\artifact\" -Force -ErrorAction Stop
+          if (Test-Path ".\profiles") {
+            Copy-Item -Path ".\profiles" -Destination ".\artifact\profiles" -Recurse -Force -ErrorAction Stop
           }
+        shell: pwsh
 
-      - name: Build NanaBox Lite CLI (user-mode only)
-        run: |
-          msbuild .\src\nanabox-lite\nanabox-lite.vcxproj `
-            /p:Configuration=Release `
-            /p:Platform=x64
-
-      - name: List build output (debug)
-        run: |
-          Get-ChildItem -Recurse -File | Where-Object { $_.Name -like "nanabox-lite.exe" }
-
-      - name: Upload CLI artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nanabox-lite-cli
-          path: |
-            src/nanabox-lite/build/Release/x64/nanabox-lite.exe
+          name: nanabox-lite-bundle
+          path: artifact
