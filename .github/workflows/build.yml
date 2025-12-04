@@ -1,34 +1,41 @@
-name: Build NanaBox Lite
+name: Build NanaBox Lite CLI
 
 on:
   push:
-    branches: [ main, initial-setup ]
+    branches:
+      - main
+      - initial-setup
   pull_request:
-    branches: [ main, initial-setup ]
+    branches:
+      - main
+      - initial-setup
 
 jobs:
-  build:
+  build-cli:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      # Se o projeto for só user-mode, isso já basta.
-      # Para driver, idealmente instalar WDK no runner ou usar imagem custom.
-
-      - name: Build solution
+      - name: Restore NuGet packages (if any)
         run: |
-          msbuild .\NanaBoxLite.sln /p:Configuration=Release /p:Platform=x64
+          if (Test-Path ".\NanaBoxLite.sln") {
+            nuget restore .\NanaBoxLite.sln
+          }
 
-      - name: Upload artifacts
+      - name: Build NanaBox Lite CLI (user-mode only)
+        run: |
+          msbuild .\src\nanabox-lite\nanabox-lite.vcxproj `
+            /p:Configuration=Release `
+            /p:Platform=x64
+
+      - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nanabox-lite-build
+          name: nanabox-lite-cli
           path: |
-            **\x64\Release\*.sys
-            **\x64\Release\*.inf
             **\x64\Release\nanabox-lite.exe
