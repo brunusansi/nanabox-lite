@@ -15,12 +15,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Deixa o msbuild disponível no PATH
+      # Disponibiliza o msbuild no PATH
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1.3.1
 
+      # Instala o Windows Driver Kit (WDK) para compilar o driver (ntddk.h, etc.)
+      - name: Install Windows Driver Kit (WDK)
+        run: choco install windows-driver-kit -y
+        shell: pwsh
+
       # Build do CLI (nanabox-lite.exe)
-      # OBS: se o .vcxproj estiver em outro lugar, ajuste o caminho abaixo.
       - name: Build CLI (nanabox-lite.exe)
         run: |
           msbuild /m /p:Configuration=Release /p:Platform=x64 src/nanabox-lite/nanabox-lite.vcxproj
@@ -36,9 +40,9 @@ jobs:
       - name: List build outputs
         run: |
           Write-Host "=== Procurando nanabox-lite.exe ==="
-          Get-ChildItem -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "nanabox-lite.exe" }
-          Write-Host "=== Procurando nanabox_hvfilter.sys ==="
-          Get-ChildItem -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "nanabox_hvfilter.sys" }
+          Get-ChildItem -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -ieq "nanabox-lite.exe" }
+          Write-Host "`n=== Procurando nanabox_hvfilter.sys ==="
+          Get-ChildItem -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -ieq "nanabox_hvfilter.sys" }
         shell: pwsh
 
       - name: Prepare artifact
@@ -46,21 +50,31 @@ jobs:
           New-Item -ItemType Directory -Path artifact -Force | Out-Null
 
           # CLI
-          # IMPORTANTE: confirme no log do passo "List build outputs" se o caminho é este mesmo.
-          # Ajuste se o projeto gerar em outra pasta.
-          Copy-Item -Path ".\src\nanabox-lite\x64\Release\nanabox-lite.exe" -Destination ".\artifact\" -Force
+          # Pelo log atual, o .exe é gerado em:
+          # src\nanabox-lite\build\Release\x64\nanabox-lite.exe
+          Copy-Item -Path ".\src\nanabox-lite\build\Release\x64\nanabox-lite.exe" `
+                    -Destination ".\artifact\" -Force
 
-          # Driver .sys e .inf
-          Copy-Item -Path ".\driver\x64\Release\nanabox_hvfilter.sys" -Destination ".\artifact\" -Force
-          Copy-Item -Path ".\driver\nanabox_hvfilter.inf" -Destination ".\artifact\" -Force
+          # Driver .sys
+          # Pelo log atual, o .sys é gerado em:
+          # driver\build\Release\x64\nanabox_hvfilter\nanabox_hvfilter.sys
+          Copy-Item -Path ".\driver\build\Release\x64\nanabox_hvfilter\nanabox_hvfilter.sys" `
+                    -Destination ".\artifact\" -Force
 
-          # Script de instalação e perfis (se existirem)
+          # Driver .inf (fonte)
+          Copy-Item -Path ".\driver\nanabox_hvfilter.inf" `
+                    -Destination ".\artifact\" -Force
+
+          # Script de instalação
           if (Test-Path ".\scripts\install.ps1") {
-            Copy-Item -Path ".\scripts\install.ps1" -Destination ".\artifact\" -Force
+            Copy-Item -Path ".\scripts\install.ps1" `
+                      -Destination ".\artifact\" -Force
           }
 
+          # Perfis (por ex. roblox-lite.json)
           if (Test-Path ".\profiles") {
-            Copy-Item -Path ".\profiles" -Destination ".\artifact\profiles" -Recurse -Force
+            Copy-Item -Path ".\profiles" `
+                      -Destination ".\artifact\profiles" -Recurse -Force
           }
         shell: pwsh
 
