@@ -2,38 +2,88 @@ name: Build NanaBox Lite
 
 on:
   push:
+    branches: [ main ]
   pull_request:
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  build-windows:
+  build:
     runs-on: windows-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Visual Studio environment
-        uses: microsoft/setup-msbuild@v1
+      # Disponibiliza o msbuild no PATH
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v1.3.1
 
-      - name: Restore (if you have NuGet/other restore steps)
-        run: nuget restore nanabox-lite.sln
-        shell: cmd
+      # Instala o Windows Driver Kit (WDK)
+      # Nota: Em alguns runners windows-latest, partes do WDK já existem,
+      # mas o choco garante os headers caso faltem.
+      - name: Install Windows Driver Kit (WDK)
+        run: choco install windows-driver-kit -y
+        shell: pwsh
 
-      - name: Build user-mode project(s)
+      # Build do CLI (nanabox-lite.exe)
+      - name: Build CLI (nanabox-lite.exe)
         run: |
-          msbuild "nanabox-lite\src\nanabox-lite\nanabox-lite.vcxproj" `
-            /p:Configuration=Release /p:Platform=x64 /m
-        shell: powershell
+          msbuild /m /p:Configuration=Release /p:Platform=x64 src/nanabox-lite/nanabox-lite.vcxproj
+        shell: pwsh
 
-      - name: Build driver (skip Inf2Cat / InfVerif on CI)
-        # This step compiles and links the driver but skips INF verification and catalog generation
+      # Build do driver (nanabox_hvfilter.sys)
+      # CORREÇÃO AQUI: Adicionado RunInfVerif=false e RunInf2Cat=false
+      # para pular a verificação de assinatura que falha no CI.
+      - name: Build driver (nanabox_hvfilter.sys)
         run: |
-          msbuild "nanabox-lite\driver\nanabox_hvfilter.vcxproj" `
-            /p:Configuration=Release /p:Platform=x64 /m `
-            /p:RunInfVerif=false /p:RunInf2Cat=false
-        shell: powershell
+          msbuild /m /p:Configuration=Release /p:Platform=x64 /p:RunInfVerif=false /p:RunInf2Cat=false driver\nanabox_hvfilter.vcxproj
+        shell: pwsh
 
-      - name: Upload driver artifact
+      # Passo de debug: mostra onde os binários foram gerados
+      - name: List build outputs
+        run: |
+          Write-Host "=== Procurando nanabox-lite.exe ==="
+          Get-ChildItem -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -ieq "nanabox-lite.exe" }
+          Write-Host "`n=== Procurando nanabox_hvfilter.sys ==="
+          Get-ChildItem -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -ieq "nanabox_hvfilter.sys" }
+        shell: pwsh
+
+      - name: Prepare artifact
+        run: |
+          New-Item -ItemType Directory -Path artifact -Force | Out-Null
+
+          # CLI
+          # Ajuste o caminho abaixo se o passo "List build outputs" mostrar um local diferente
+          Copy-Item -Path ".\src\nanabox-lite\build\Release\x64\nanabox-lite.exe" `
+                    -Destination ".\artifact\" -Force
+
+          # Driver .sys
+          # O caminho abaixo geralmente muda para a raiz da pasta de build x64, 
+          # mas mantive o seu original. Se der erro de "File not found", 
+          # tente remover "\nanabox_hvfilter" do final do caminho de origem.
+          Copy-Item -Path ".\driver\build\Release\x64\nanabox_hvfilter.sys" `
+                    -Destination ".\artifact\" -Force
+
+          # Driver .inf (fonte)
+          Copy-Item -Path ".\driver\nanabox_hvfilter.inf" `
+                    -Destination ".\artifact\" -Force
+
+          # Script de instalação
+          if (Test-Path ".\scripts\install.ps1") {
+            Copy-Item -Path ".\scripts\install.ps1" `
+                      -Destination ".\artifact\" -Force
+          }
+
+          # Perfis (por ex. roblox-lite.json)
+          if (Test-Path ".\profiles") {
+            Copy-Item -Path ".\profiles" `
+                      -Destination ".\artifact\profiles" -Recurse -Force
+          }
+        shell: pwsh
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nanabox-hvfilter-release
-          path: driver\build\Release\x64\nanabox_hvfilter.sys
+          name: nanabox-lite-bundle
+          path: artifact
