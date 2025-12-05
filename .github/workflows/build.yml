@@ -19,18 +19,13 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1.3.1
 
-      # Instala o Windows Driver Kit (WDK) para compilar o driver (ntddk.h, etc.)
-      - name: Install Windows Driver Kit (WDK)
-        run: choco install windows-driver-kit -y
-        shell: pwsh
-
       # Build do CLI (nanabox-lite.exe)
       - name: Build CLI (nanabox-lite.exe)
         run: |
           msbuild /m /p:Configuration=Release /p:Platform=x64 src/nanabox-lite/nanabox-lite.vcxproj
         shell: pwsh
 
-      # Build do driver (nanabox_hvfilter.sys) - INF/Inf2Cat desativados no CI
+      # Build do driver (nanabox_hvfilter.sys) - desativando InfVerif/Inf2Cat no CI
       - name: Build driver (nanabox_hvfilter.sys)
         run: |
           msbuild driver\nanabox_hvfilter.vcxproj `
@@ -55,14 +50,10 @@ jobs:
           New-Item -ItemType Directory -Path artifact -Force | Out-Null
 
           # CLI
-          # Pelo log atual, o .exe é gerado em:
-          # src\nanabox-lite\build\Release\x64\nanabox-lite.exe
           Copy-Item -Path ".\src\nanabox-lite\build\Release\x64\nanabox-lite.exe" `
                     -Destination ".\artifact\" -Force
 
           # Driver .sys
-          # Pelo log atual, o .sys é gerado em:
-          # driver\build\Release\x64\nanabox_hvfilter\nanabox_hvfilter.sys
           Copy-Item -Path ".\driver\build\Release\x64\nanabox_hvfilter\nanabox_hvfilter.sys" `
                     -Destination ".\artifact\" -Force
 
