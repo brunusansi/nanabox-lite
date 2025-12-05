@@ -42,7 +42,7 @@ jobs:
           }
         shell: pwsh
 
-      # Debug WDK layout (opcional, mas útil enquanto acertamos o path)
+      # (Opcional) Debug WDK layout
       - name: Debug WDK layout
         run: |
           Write-Host "Listing WDK include root..."
@@ -63,39 +63,48 @@ jobs:
       - name: Build driver (nanabox_hvfilter.sys)
         id: build_driver
         run: |
-          # Configure WDK include paths (WDK 10)
-          $wdkRoot = "C:\Program Files (x86)\Windows Kits\10"
-          $includeRoot = Join-Path $wdkRoot "Include"
-
-          if (-not (Test-Path $includeRoot)) {
-            Write-Host "::warning::WDK Include root not found at $includeRoot"
+          # Descobrir exatamente onde está ntddk.h (WDK 10 real)
+          $ntddk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Recurse -Filter ntddk.h -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $ntddk) {
+            Write-Host "::warning::ntddk.h not found under C:\Program Files (x86)\Windows Kits\10\Include - driver build will likely fail."
           } else {
-            # Pick the highest 10.x.x.x version
-            $wdkVersions = Get-ChildItem $includeRoot -Directory -ErrorAction SilentlyContinue |
-              Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } |
-              Sort-Object Name -Descending
+            $kmInclude = Split-Path $ntddk.FullName -Parent
+            Write-Host "Found ntddk.h at: $($ntddk.FullName)"
+            Write-Host "Using KM include directory: $kmInclude"
 
-            if ($wdkVersions) {
-              $wdkVersion = $wdkVersions[0].Name
-              Write-Host "Using WDK version: $wdkVersion"
+            # shared/ucrt da mesma versão, se existirem
+            $versionRoot = Split-Path $kmInclude -Parent  # ...\10.0.22000.0
+            $sharedInclude = Join-Path $versionRoot "shared"
+            $ucrtInclude   = Join-Path $versionRoot "ucrt"
 
-              $kmInclude     = Join-Path (Join-Path $includeRoot $wdkVersion) "km"
-              $sharedInclude = Join-Path (Join-Path $includeRoot $wdkVersion) "shared"
-              $ucrtInclude   = Join-Path (Join-Path $includeRoot $wdkVersion) "ucrt"
-
-              Write-Host "Adding to INCLUDE:"
-              Write-Host "  $kmInclude"
-              Write-Host "  $sharedInclude"
-              Write-Host "  $ucrtInclude"
-
-              $env:INCLUDE = "$kmInclude;$sharedInclude;$ucrtInclude;$env:INCLUDE"
+            # WDF KMDF headers (pega a versão mais alta disponível)
+            $wdfKmdf = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include\wdf\kmdf" -Directory -ErrorAction SilentlyContinue |
+              Sort-Object Name -Descending |
+              Select-Object -First 1
+            $wdfKmInclude = $null
+            if ($wdfKmdf) {
+              $wdfKmInclude = $wdfKmdf.FullName
+              Write-Host "Using KMDF include directory: $wdfKmInclude"
             } else {
-              Write-Host "::warning::No versioned WDK include directories found under $includeRoot"
+              Write-Host "::warning::No KMDF include directory found under ...\Include\wdf\kmdf"
             }
+
+            Write-Host "Adding to INCLUDE:"
+            Write-Host "  $kmInclude"
+            if (Test-Path $sharedInclude) { Write-Host "  $sharedInclude" }
+            if (Test-Path $ucrtInclude)   { Write-Host "  $ucrtInclude" }
+            if ($wdfKmInclude)            { Write-Host "  $wdfKmInclude" }
+
+            $paths = @($kmInclude)
+            if (Test-Path $sharedInclude) { $paths += $sharedInclude }
+            if (Test-Path $ucrtInclude)   { $paths += $ucrtInclude }
+            if ($wdfKmInclude)            { $paths += $wdfKmInclude }
+
+            $env:INCLUDE = ($paths -join ';') + ';' + $env:INCLUDE
           }
 
-          Write-Host "`nCurrent INCLUDE:"
-          $env:INCLUDE.Split(';') | ForEach-Object { "  $_" }
+          Write-Host "`nCurrent INCLUDE (first 20 entries):"
+          $env:INCLUDE.Split(';') | Select-Object -First 20 | ForEach-Object { "  $_" }
 
           msbuild driver\nanabox_hvfilter.vcxproj `
             /m `
