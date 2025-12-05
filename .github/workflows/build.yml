@@ -25,10 +25,21 @@ jobs:
           msbuild /m /p:Configuration=Release /p:Platform=x64 src/nanabox-lite/nanabox-lite.vcxproj
         shell: pwsh
 
-      # Install Windows Driver Kit (WDK) required for driver compilation
+      # Install Windows Driver Kit (WDK) required for driver compilation (best effort)
       - name: Install Windows Driver Kit (WDK)
         run: |
-          choco install windows-driver-kit -y
+          $ErrorActionPreference = "Continue"
+
+          Write-Host "Trying to install Windows Driver Kit 11 via Chocolatey..."
+          choco install windowsdriverkit11 -y
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::warning::Failed to install windowsdriverkit11 (exit code $LASTEXITCODE). Trying windowsdriverkit10..."
+            choco install windowsdriverkit10 -y
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "::warning::Failed to install windowsdriverkit10 as well (exit code $LASTEXITCODE). Continuing without WDK installation."
+              exit 0
+            }
+          }
         shell: pwsh
 
       # Build driver (nanabox_hvfilter.sys) - disabling InfVerif/Inf2Cat in CI
