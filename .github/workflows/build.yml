@@ -1,4 +1,4 @@
-name: Build NanaBox Lite
+name: Build NanaBox Lite (Hosted)
 
 on:
   push:
@@ -25,107 +25,24 @@ jobs:
           msbuild /m /p:Configuration=Release /p:Platform=x64 src/nanabox-lite/nanabox-lite.vcxproj
         shell: pwsh
 
-      # Install Windows Driver Kit (WDK) required for driver compilation (best effort)
-      - name: Install Windows Driver Kit (WDK)
+      # Aviso explícito sobre o driver
+      - name: Note about driver build
         run: |
-          $ErrorActionPreference = "Continue"
-
-          Write-Host "Trying to install Windows Driver Kit 11 via Chocolatey..."
-          choco install windowsdriverkit11 -y
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "::warning::Failed to install windowsdriverkit11 (exit code $LASTEXITCODE). Trying windowsdriverkit10..."
-            choco install windowsdriverkit10 -y
-            if ($LASTEXITCODE -ne 0) {
-              Write-Host "::warning::Failed to install windowsdriverkit10 as well (exit code $LASTEXITCODE). Continuing without WDK installation."
-              exit 0
-            }
-          }
+          Write-Host "======================================================="
+          Write-Host "INFO: Hosted GitHub Actions runner does NOT build the"
+          Write-Host "      kernel driver (nanabox_hvfilter.sys) because WDK"
+          Write-Host "      is not fully supported/integrated in this image."
+          Write-Host ""
+          Write-Host "      To build the driver, use Visual Studio 2022 + WDK"
+          Write-Host "      em um ambiente local ou VM com WDK instalado."
+          Write-Host "======================================================="
         shell: pwsh
 
-      # (Opcional) Debug WDK layout
-      - name: Debug WDK layout
-        run: |
-          Write-Host "Listing WDK include root..."
-          Get-ChildItem "C:\Program Files (x86)\Windows Kits" -Recurse -Directory -ErrorAction SilentlyContinue |
-            Select-Object -First 50 |
-            ForEach-Object { $_.FullName }
-
-          Write-Host "`nSearching for ntddk.h..."
-          Get-ChildItem "C:\Program Files (x86)\Windows Kits" -Recurse -Filter ntddk.h -ErrorAction SilentlyContinue |
-            ForEach-Object { $_.FullName }
-
-          Write-Host "`nSearching for wdf.h..."
-          Get-ChildItem "C:\Program Files (x86)\Windows Kits" -Recurse -Filter wdf.h -ErrorAction SilentlyContinue |
-            ForEach-Object { $_.FullName }
-        shell: pwsh
-
-      # Build driver (nanabox_hvfilter.sys) - disabling InfVerif/Inf2Cat in CI
-      - name: Build driver (nanabox_hvfilter.sys)
-        id: build_driver
-        run: |
-          # Descobrir exatamente onde está ntddk.h (WDK 10 real)
-          $ntddk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Recurse -Filter ntddk.h -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $ntddk) {
-            Write-Host "::warning::ntddk.h not found under C:\Program Files (x86)\Windows Kits\10\Include - driver build will likely fail."
-          } else {
-            $kmInclude = Split-Path $ntddk.FullName -Parent
-            Write-Host "Found ntddk.h at: $($ntddk.FullName)"
-            Write-Host "Using KM include directory: $kmInclude"
-
-            # shared/ucrt da mesma versão, se existirem
-            $versionRoot = Split-Path $kmInclude -Parent  # ...\10.0.22000.0
-            $sharedInclude = Join-Path $versionRoot "shared"
-            $ucrtInclude   = Join-Path $versionRoot "ucrt"
-
-            # WDF KMDF headers (pega a versão mais alta disponível)
-            $wdfKmdf = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include\wdf\kmdf" -Directory -ErrorAction SilentlyContinue |
-              Sort-Object Name -Descending |
-              Select-Object -First 1
-            $wdfKmInclude = $null
-            if ($wdfKmdf) {
-              $wdfKmInclude = $wdfKmdf.FullName
-              Write-Host "Using KMDF include directory: $wdfKmInclude"
-            } else {
-              Write-Host "::warning::No KMDF include directory found under ...\Include\wdf\kmdf"
-            }
-
-            Write-Host "Adding to INCLUDE:"
-            Write-Host "  $kmInclude"
-            if (Test-Path $sharedInclude) { Write-Host "  $sharedInclude" }
-            if (Test-Path $ucrtInclude)   { Write-Host "  $ucrtInclude" }
-            if ($wdfKmInclude)            { Write-Host "  $wdfKmInclude" }
-
-            $paths = @($kmInclude)
-            if (Test-Path $sharedInclude) { $paths += $sharedInclude }
-            if (Test-Path $ucrtInclude)   { $paths += $ucrtInclude }
-            if ($wdfKmInclude)            { $paths += $wdfKmInclude }
-
-            $env:INCLUDE = ($paths -join ';') + ';' + $env:INCLUDE
-          }
-
-          Write-Host "`nCurrent INCLUDE (first 20 entries):"
-          $env:INCLUDE.Split(';') | Select-Object -First 20 | ForEach-Object { "  $_" }
-
-          msbuild driver\nanabox_hvfilter.vcxproj `
-            /m `
-            /p:Configuration=Release `
-            /p:Platform=x64 `
-            /p:RunInf2Cat=false `
-            /p:RunInfVerif=false
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "::warning::Driver build failed with exit code $LASTEXITCODE - artifact will not include .sys file"
-            exit 0
-          }
-        shell: pwsh
-
-      # Debug step: show where binaries were generated
+      # Debug step: show where CLI binary was generated
       - name: List build outputs
         run: |
           Write-Host "=== Searching for nanabox-lite.exe ==="
           Get-ChildItem -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -ieq "nanabox-lite.exe" }
-          Write-Host "`n=== Searching for nanabox_hvfilter.sys ==="
-          Get-ChildItem -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -ieq "nanabox_hvfilter.sys" }
         shell: pwsh
 
       - name: Prepare artifact
@@ -136,18 +53,11 @@ jobs:
           Copy-Item -Path ".\src\nanabox-lite\build\Release\x64\nanabox-lite.exe" `
                     -Destination ".\artifact\" -Force
 
-          # Driver .sys (only if generated)
-          $sysPath = ".\driver\build\Release\x64\nanabox_hvfilter\nanabox_hvfilter.sys"
-          if (Test-Path $sysPath) {
-            Copy-Item -Path $sysPath -Destination ".\artifact\" -Force
-            Write-Host "Driver .sys copied successfully."
-          } else {
-            Write-Host "Warning: Driver .sys not found at $sysPath - skipping."
+          # Driver .inf (fonte)
+          if (Test-Path ".\driver\nanabox_hvfilter.inf") {
+            Copy-Item -Path ".\driver\nanabox_hvfilter.inf" `
+                      -Destination ".\artifact\" -Force
           }
-
-          # Driver .inf (source)
-          Copy-Item -Path ".\driver\nanabox_hvfilter.inf" `
-                    -Destination ".\artifact\" -Force
 
           # Installation script
           if (Test-Path ".\scripts\install.ps1") {
