@@ -19,9 +19,7 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1.3.1
 
-      # Instala o Windows Driver Kit (WDK)
-      # Nota: Em alguns runners windows-latest, partes do WDK já existem,
-      # mas o choco garante os headers caso faltem.
+      # Instala o Windows Driver Kit (WDK) para compilar o driver (ntddk.h, etc.)
       - name: Install Windows Driver Kit (WDK)
         run: choco install windows-driver-kit -y
         shell: pwsh
@@ -32,12 +30,15 @@ jobs:
           msbuild /m /p:Configuration=Release /p:Platform=x64 src/nanabox-lite/nanabox-lite.vcxproj
         shell: pwsh
 
-      # Build do driver (nanabox_hvfilter.sys)
-      # CORREÇÃO AQUI: Adicionado RunInfVerif=false e RunInf2Cat=false
-      # para pular a verificação de assinatura que falha no CI.
+      # Build do driver (nanabox_hvfilter.sys) - INF/Inf2Cat desativados no CI
       - name: Build driver (nanabox_hvfilter.sys)
         run: |
-          msbuild /m /p:Configuration=Release /p:Platform=x64 /p:RunInfVerif=false /p:RunInf2Cat=false driver\nanabox_hvfilter.vcxproj
+          msbuild driver\nanabox_hvfilter.vcxproj `
+            /m `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:RunInf2Cat=false `
+            /p:RunInfVerif=false
         shell: pwsh
 
       # Passo de debug: mostra onde os binários foram gerados
@@ -54,15 +55,15 @@ jobs:
           New-Item -ItemType Directory -Path artifact -Force | Out-Null
 
           # CLI
-          # Ajuste o caminho abaixo se o passo "List build outputs" mostrar um local diferente
+          # Pelo log atual, o .exe é gerado em:
+          # src\nanabox-lite\build\Release\x64\nanabox-lite.exe
           Copy-Item -Path ".\src\nanabox-lite\build\Release\x64\nanabox-lite.exe" `
                     -Destination ".\artifact\" -Force
 
           # Driver .sys
-          # O caminho abaixo geralmente muda para a raiz da pasta de build x64, 
-          # mas mantive o seu original. Se der erro de "File not found", 
-          # tente remover "\nanabox_hvfilter" do final do caminho de origem.
-          Copy-Item -Path ".\driver\build\Release\x64\nanabox_hvfilter.sys" `
+          # Pelo log atual, o .sys é gerado em:
+          # driver\build\Release\x64\nanabox_hvfilter\nanabox_hvfilter.sys
+          Copy-Item -Path ".\driver\build\Release\x64\nanabox_hvfilter\nanabox_hvfilter.sys" `
                     -Destination ".\artifact\" -Force
 
           # Driver .inf (fonte)
