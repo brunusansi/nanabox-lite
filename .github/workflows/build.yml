@@ -42,21 +42,60 @@ jobs:
           }
         shell: pwsh
 
+      # Debug WDK layout (opcional, mas útil enquanto acertamos o path)
+      - name: Debug WDK layout
+        run: |
+          Write-Host "Listing WDK include root..."
+          Get-ChildItem "C:\Program Files (x86)\Windows Kits" -Recurse -Directory -ErrorAction SilentlyContinue |
+            Select-Object -First 50 |
+            ForEach-Object { $_.FullName }
+
+          Write-Host "`nSearching for ntddk.h..."
+          Get-ChildItem "C:\Program Files (x86)\Windows Kits" -Recurse -Filter ntddk.h -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.FullName }
+
+          Write-Host "`nSearching for wdf.h..."
+          Get-ChildItem "C:\Program Files (x86)\Windows Kits" -Recurse -Filter wdf.h -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.FullName }
+        shell: pwsh
+
       # Build driver (nanabox_hvfilter.sys) - disabling InfVerif/Inf2Cat in CI
       - name: Build driver (nanabox_hvfilter.sys)
         id: build_driver
         run: |
-          # Find the WDK version installed
-          $wdkIncludePath = "C:\Program Files (x86)\Windows Kits\10\Include"
-          $wdkVersions = Get-ChildItem $wdkIncludePath -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } | Sort-Object Name -Descending
-          if ($wdkVersions) {
-            $wdkVersion = $wdkVersions[0].Name
-            Write-Host "Using WDK version: $wdkVersion"
-            $env:INCLUDE += ";C:\Program Files (x86)\Windows Kits\10\Include\$wdkVersion\km"
-            $env:INCLUDE += ";C:\Program Files (x86)\Windows Kits\10\Include\$wdkVersion\shared"
+          # Configure WDK include paths (WDK 10)
+          $wdkRoot = "C:\Program Files (x86)\Windows Kits\10"
+          $includeRoot = Join-Path $wdkRoot "Include"
+
+          if (-not (Test-Path $includeRoot)) {
+            Write-Host "::warning::WDK Include root not found at $includeRoot"
           } else {
-            Write-Host "::warning::WDK include directory not found - driver build may fail"
+            # Pick the highest 10.x.x.x version
+            $wdkVersions = Get-ChildItem $includeRoot -Directory -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } |
+              Sort-Object Name -Descending
+
+            if ($wdkVersions) {
+              $wdkVersion = $wdkVersions[0].Name
+              Write-Host "Using WDK version: $wdkVersion"
+
+              $kmInclude     = Join-Path (Join-Path $includeRoot $wdkVersion) "km"
+              $sharedInclude = Join-Path (Join-Path $includeRoot $wdkVersion) "shared"
+              $ucrtInclude   = Join-Path (Join-Path $includeRoot $wdkVersion) "ucrt"
+
+              Write-Host "Adding to INCLUDE:"
+              Write-Host "  $kmInclude"
+              Write-Host "  $sharedInclude"
+              Write-Host "  $ucrtInclude"
+
+              $env:INCLUDE = "$kmInclude;$sharedInclude;$ucrtInclude;$env:INCLUDE"
+            } else {
+              Write-Host "::warning::No versioned WDK include directories found under $includeRoot"
+            }
           }
+
+          Write-Host "`nCurrent INCLUDE:"
+          $env:INCLUDE.Split(';') | ForEach-Object { "  $_" }
 
           msbuild driver\nanabox_hvfilter.vcxproj `
             /m `
