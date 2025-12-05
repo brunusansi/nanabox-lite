@@ -56,6 +56,17 @@
     <IntDir>$(SolutionDir)build\$(Configuration)\$(Platform)\$(ProjectName)\</IntDir>
     <OutDir>$(SolutionDir)build\$(Configuration)\$(Platform)\</OutDir>
   </PropertyGroup>
+  <!--
+    Disable INF verification and driver signing for CI builds.
+    GitHub Actions (and most CI systems) set CI=true automatically.
+    This avoids issues with missing WDK tools (InfVerif.dll, SignTool) on CI runners.
+    Local builds with VS2022+WDK will have full INF verification and signing support.
+  -->
+  <PropertyGroup Condition="'$(CI)' == 'true'">
+    <InfVerif_TargetInfFile />
+    <DriverSign>Off</DriverSign>
+    <SignMode>Off</SignMode>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
