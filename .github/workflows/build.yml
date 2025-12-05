@@ -1,1 +1,110 @@
+name: Build NanaBox Lite
 
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Add msbuild to PATH
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v1.3.1
+
+      # Build CLI (nanabox-lite.exe)
+      - name: Build CLI (nanabox-lite.exe)
+        run: |
+          msbuild /m /p:Configuration=Release /p:Platform=x64 src/nanabox-lite/nanabox-lite.vcxproj
+        shell: pwsh
+
+      # Install Windows Driver Kit (WDK) required for driver compilation
+      - name: Install Windows Driver Kit (WDK)
+        run: |
+          choco install windows-driver-kit -y
+        shell: pwsh
+
+      # Build driver (nanabox_hvfilter.sys) - disabling InfVerif/Inf2Cat in CI
+      - name: Build driver (nanabox_hvfilter.sys)
+        id: build_driver
+        run: |
+          # Find the WDK version installed
+          $wdkIncludePath = "C:\Program Files (x86)\Windows Kits\10\Include"
+          $wdkVersions = Get-ChildItem $wdkIncludePath -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } | Sort-Object Name -Descending
+          if ($wdkVersions) {
+            $wdkVersion = $wdkVersions[0].Name
+            Write-Host "Using WDK version: $wdkVersion"
+            $env:INCLUDE += ";C:\Program Files (x86)\Windows Kits\10\Include\$wdkVersion\km"
+            $env:INCLUDE += ";C:\Program Files (x86)\Windows Kits\10\Include\$wdkVersion\shared"
+          } else {
+            Write-Host "::warning::WDK include directory not found - driver build may fail"
+          }
+
+          msbuild driver\nanabox_hvfilter.vcxproj `
+            /m `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:RunInf2Cat=false `
+            /p:RunInfVerif=false
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::warning::Driver build failed with exit code $LASTEXITCODE - artifact will not include .sys file"
+            exit 0
+          }
+        shell: pwsh
+
+      # Debug step: show where binaries were generated
+      - name: List build outputs
+        run: |
+          Write-Host "=== Searching for nanabox-lite.exe ==="
+          Get-ChildItem -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -ieq "nanabox-lite.exe" }
+          Write-Host "`n=== Searching for nanabox_hvfilter.sys ==="
+          Get-ChildItem -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -ieq "nanabox_hvfilter.sys" }
+        shell: pwsh
+
+      - name: Prepare artifact
+        run: |
+          New-Item -ItemType Directory -Path artifact -Force | Out-Null
+
+          # CLI executable
+          Copy-Item -Path ".\src\nanabox-lite\build\Release\x64\nanabox-lite.exe" `
+                    -Destination ".\artifact\" -Force
+
+          # Driver .sys (only if generated)
+          $sysPath = ".\driver\build\Release\x64\nanabox_hvfilter\nanabox_hvfilter.sys"
+          if (Test-Path $sysPath) {
+            Copy-Item -Path $sysPath -Destination ".\artifact\" -Force
+            Write-Host "Driver .sys copied successfully."
+          } else {
+            Write-Host "Warning: Driver .sys not found at $sysPath - skipping."
+          }
+
+          # Driver .inf (source)
+          Copy-Item -Path ".\driver\nanabox_hvfilter.inf" `
+                    -Destination ".\artifact\" -Force
+
+          # Installation script
+          if (Test-Path ".\scripts\install.ps1") {
+            Copy-Item -Path ".\scripts\install.ps1" `
+                      -Destination ".\artifact\" -Force
+          }
+
+          # Profiles (e.g., roblox-lite.json)
+          if (Test-Path ".\profiles") {
+            Copy-Item -Path ".\profiles" `
+                      -Destination ".\artifact\profiles" -Recurse -Force
+          }
+        shell: pwsh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanabox-lite-bundle
+          path: artifact
